@@ -18,24 +18,97 @@ presets:
 EOF
 }
 
-wizard() {
-  echo "ProxyCTL wizard"
-  echo "1) API / backend / OpenAI"
-  echo "2) Telegram mobile"
-  echo "3) Universal"
-  echo "4) MTProto"
-  echo "5) Full"
-
-  read -r -p "Выбор [1-5]: " choice
+choice_to_preset() {
+  local choice="${1:-}"
 
   case "${choice}" in
-    1) install_preset "api" ;;
-    2) install_preset "telegram-mobile" ;;
-    3) install_preset "universal" ;;
-    4) install_preset "mtproto" ;;
-    5) install_preset "full" ;;
-    *) echo "Неверный выбор"; exit 1 ;;
+    1) echo "api" ;;
+    2) echo "telegram-mobile" ;;
+    3) echo "universal" ;;
+    4) echo "mtproto" ;;
+    5) echo "full" ;;
+    *) return 1 ;;
   esac
+}
+
+wizard_multiselect_whiptail() {
+  local selected
+  local -a chosen=()
+  local choice
+
+  selected=$(
+    whiptail --title "ProxyCTL wizard" \
+      --checklist "Выбери пресеты (Space = выбрать, Enter = подтвердить):" \
+      20 72 10 \
+      "1" "API / backend / OpenAI" OFF \
+      "2" "Telegram mobile" OFF \
+      "3" "Universal" OFF \
+      "4" "MTProto" OFF \
+      "5" "Full" OFF \
+      3>&1 1>&2 2>&3
+  ) || return 1
+
+  # whiptail возвращает элементы в кавычках: "1" "3"
+  selected="${selected//\"/}"
+
+  for choice in ${selected}; do
+    chosen+=("$(choice_to_preset "${choice}")")
+  done
+
+  if [[ "${#chosen[@]}" -eq 0 ]]; then
+    echo "Ничего не выбрано"
+    return 1
+  fi
+
+  printf '%s\n' "${chosen[@]}"
+}
+
+wizard() {
+  echo "ProxyCTL wizard"
+  local -a presets_to_install=()
+
+  if command -v whiptail >/dev/null 2>&1 && [[ -t 0 && -t 1 ]]; then
+    local preset
+    while IFS= read -r preset; do
+      presets_to_install+=("${preset}")
+    done < <(wizard_multiselect_whiptail)
+  else
+    echo "1) API / backend / OpenAI"
+    echo "2) Telegram mobile"
+    echo "3) Universal"
+    echo "4) MTProto"
+    echo "5) Full"
+    echo "Можно выбрать несколько: 1,3,4 или 1 3 4"
+
+    local choices_raw
+    local token
+    local preset
+    local -A seen=()
+
+    read -r -p "Выбор [1-5]: " choices_raw
+    choices_raw="${choices_raw//,/ }"
+
+    for token in ${choices_raw}; do
+      if ! preset="$(choice_to_preset "${token}")"; then
+        echo "Неверный выбор: ${token}"
+        exit 1
+      fi
+
+      if [[ -z "${seen[${preset}]:-}" ]]; then
+        presets_to_install+=("${preset}")
+        seen["${preset}"]=1
+      fi
+    done
+  fi
+
+  if [[ "${#presets_to_install[@]}" -eq 0 ]]; then
+    echo "Ничего не выбрано"
+    exit 1
+  fi
+
+  for preset in "${presets_to_install[@]}"; do
+    install_preset "${preset}"
+  done
 }
 
 install_preset() {
