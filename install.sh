@@ -12,6 +12,7 @@ REPO_NAME="proxyctl"
 REPO_BRANCH="main"
 
 BASE_RAW_URL="https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${REPO_BRANCH}"
+# Основной путь к CLI-скрипту в репозитории.
 PROXYCTL_URL="${BASE_RAW_URL}/proxyctl"
 
 RUN_WIZARD="${RUN_WIZARD:-true}"
@@ -102,7 +103,10 @@ download_proxyctl() {
   log "Скачиваю proxyctl из GitHub"
   backup_existing_binary
 
-  curl -fsSL "${PROXYCTL_URL}" -o "${INSTALL_DIR}/proxyctl"
+  if ! curl -fsSL "${PROXYCTL_URL}" -o "${INSTALL_DIR}/proxyctl"; then
+    # Обратная совместимость на случай старой структуры репозитория.
+    curl -fsSL "${BASE_RAW_URL}/proxyctl.sh" -o "${INSTALL_DIR}/proxyctl"
+  fi
   chmod +x "${INSTALL_DIR}/proxyctl"
 
   if [[ ! -s "${INSTALL_DIR}/proxyctl" ]]; then
