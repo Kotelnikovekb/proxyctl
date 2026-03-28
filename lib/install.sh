@@ -72,7 +72,7 @@ ensure_3proxy_service() {
   local runner
 
   mode="$(service_mode)"
-  proxy_bin="$(command_path_or_die 3proxy)"
+  proxy_bin="$(resolve_3proxy_bin)"
 
   if [[ "${mode}" == "systemd" ]]; then
     cat > "/etc/systemd/system/${SERVICE_3PROXY}" <<EOF_SVC
@@ -107,11 +107,64 @@ EOF_RUN
   start_process_service "3proxy"
 }
 
+install_3proxy_from_source() {
+  local ref="${PROXYCTL_3PROXY_REF:-master}"
+  local build_dir
+  local repo_url="https://github.com/3proxy/3proxy.git"
+
+  log "Собираю 3proxy из исходников (${repo_url}, ref=${ref})"
+  apt_install git build-essential make gcc libc6-dev
+
+  build_dir="$(mktemp -d /tmp/proxyctl-3proxy-build.XXXXXX)"
+  git clone --depth 1 --branch "${ref}" "${repo_url}" "${build_dir}"
+  make -C "${build_dir}" -f Makefile.Linux
+
+  if [[ ! -x "${build_dir}/bin/3proxy" ]]; then
+    error "Сборка 3proxy завершилась без бинарника ${build_dir}/bin/3proxy"
+    exit 1
+  fi
+
+  install -m 0755 "${build_dir}/bin/3proxy" "${THIRDPARTY_3PROXY_BIN}"
+  rm -rf "${build_dir}"
+  success "3proxy установлен из исходников в ${THIRDPARTY_3PROXY_BIN}"
+}
+
+resolve_3proxy_bin() {
+  if command -v 3proxy >/dev/null 2>&1; then
+    command -v 3proxy
+    return
+  fi
+
+  if [[ -x "${THIRDPARTY_3PROXY_BIN}" ]]; then
+    echo "${THIRDPARTY_3PROXY_BIN}"
+    return
+  fi
+
+  error "Бинарник 3proxy не найден"
+  exit 1
+}
+
 install_3proxy_stack() {
   local mode
 
   mode="$(service_mode)"
-  apt_install 3proxy
+  if ! command -v apt-get >/dev/null 2>&1; then
+    error "Поддерживается только Debian/Ubuntu с apt-get"
+    exit 1
+  fi
+
+  log "Обновляю индекс пакетов"
+  apt-get update -y
+
+  if ! command -v 3proxy >/dev/null 2>&1 && [[ ! -x "${THIRDPARTY_3PROXY_BIN}" ]]; then
+    log "Пробую установить пакет 3proxy из репозитория"
+    if DEBIAN_FRONTEND=noninteractive apt-get install -y 3proxy; then
+      success "Пакет 3proxy установлен из репозитория"
+    else
+      warn "Пакет 3proxy недоступен в репозитории. Перехожу на сборку из исходников."
+      install_3proxy_from_source
+    fi
+  fi
 
   if [[ "${mode}" == "systemd" ]] && systemctl list-unit-files | grep -q "^3proxy\\.service"; then
     systemctl disable --now 3proxy.service >/dev/null 2>&1 || true
