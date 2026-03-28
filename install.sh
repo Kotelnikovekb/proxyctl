@@ -12,8 +12,13 @@ REPO_NAME="proxyctl"
 REPO_BRANCH="main"
 
 BASE_RAW_URL="https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${REPO_BRANCH}"
-# Основной путь к CLI-скрипту в репозитории.
-PROXYCTL_URL="${BASE_RAW_URL}/proxyctl"
+CLI_FILES=(
+  "proxyctl"
+  "lib/core.sh"
+  "lib/install.sh"
+  "lib/users.sh"
+  "lib/commands.sh"
+)
 
 RUN_WIZARD="${RUN_WIZARD:-true}"
 
@@ -85,6 +90,7 @@ local packages=(
 create_directories() {
   log "Создаю директории"
   mkdir -p "${INSTALL_DIR}"
+  mkdir -p "${INSTALL_DIR}/lib"
   mkdir -p "${CONFIG_DIR}"
   mkdir -p "${LOG_DIR}"
 
@@ -100,13 +106,18 @@ backup_existing_binary() {
 }
 
 download_proxyctl() {
-  log "Скачиваю proxyctl из GitHub"
+  log "Скачиваю proxyctl и модули из GitHub"
   backup_existing_binary
 
-  if ! curl -fsSL "${PROXYCTL_URL}" -o "${INSTALL_DIR}/proxyctl"; then
-    # Обратная совместимость на случай старой структуры репозитория.
-    curl -fsSL "${BASE_RAW_URL}/proxyctl.sh" -o "${INSTALL_DIR}/proxyctl"
-  fi
+  local file
+  local target
+
+  for file in "${CLI_FILES[@]}"; do
+    target="${INSTALL_DIR}/${file}"
+    mkdir -p "$(dirname "${target}")"
+    curl -fsSL "${BASE_RAW_URL}/${file}" -o "${target}"
+  done
+
   chmod +x "${INSTALL_DIR}/proxyctl"
 
   if [[ ! -s "${INSTALL_DIR}/proxyctl" ]]; then
@@ -135,6 +146,8 @@ PROXYCTL_DEFAULT_HTTP_PORT=3128
 PROXYCTL_DEFAULT_SOCKS_PORT=1080
 PROXYCTL_DEFAULT_MTPROTO_PORT=443
 PROXYCTL_DATA_DIR=/var/lib/proxyctl
+PROXYCTL_MTG_DOMAIN=google.com
+PROXYCTL_MTG_VERSION=v2.1.7
 EOF
     success "Создан ${config_file}"
   else
