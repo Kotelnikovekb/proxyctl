@@ -21,6 +21,15 @@ presets:
   universal
   mtproto
   full
+
+examples:
+  proxyctl install full
+  proxyctl install api mtproto
+  proxyctl add-user alice
+  proxyctl list-users
+  proxyctl show-connect
+  proxyctl show-telegram-link
+  proxyctl status
 EOF_HELP
 }
 

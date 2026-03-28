@@ -1,0 +1,17 @@
+# IDE
+.idea/
+*.iml
+
+# macOS
+.DS_Store
+
+# Logs and temp files
+*.log
+*.tmp
+*.swp
+*~
+
+# Runtime artifacts (when testing locally)
+var/
+run/
+.tmp/
