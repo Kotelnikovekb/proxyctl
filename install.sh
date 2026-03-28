@@ -7,7 +7,7 @@ BIN_PATH="/usr/local/bin/proxyctl"
 CONFIG_DIR="/etc/proxyctl"
 LOG_DIR="/var/log/proxyctl"
 
-REPO_OWNER="YOUR_GITHUB_USERNAME"
+REPO_OWNER="Kotelnikovekb"
 REPO_NAME="proxyctl"
 REPO_BRANCH="main"
 
