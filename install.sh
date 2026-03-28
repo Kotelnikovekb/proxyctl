@@ -71,16 +71,10 @@ install_packages() {
   log "Обновляю список пакетов"
   apt-get update -y
 
-  local packages=(
-    curl
-    ca-certificates
-    bash
-    coreutils
-    grep
-    sed
-    awk
-  )
-
+local packages=(
+  curl
+  ca-certificates
+)
   log "Устанавливаю зависимости: ${packages[*]}"
   DEBIAN_FRONTEND=noninteractive apt-get install -y "${packages[@]}"
 
