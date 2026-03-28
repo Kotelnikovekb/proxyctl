@@ -305,19 +305,27 @@ EOF_RUN
 }
 
 install_mtproto_stack() {
+  local host
+
   apt_install curl ca-certificates openssl
   ensure_mtg_binary
   ensure_mtg_secret
   ensure_mtg_service
+  host="$(detect_host)"
 
   cat <<EOF_HINT
 
 MTProto данные для клиента:
-  host: <IP_сервера>
+  host: ${host}
   port: ${PROXYCTL_DEFAULT_MTPROTO_PORT}
   secret: ${PROXYCTL_MTG_SECRET}
   domain (fake-tls): ${PROXYCTL_MTG_DOMAIN}
 EOF_HINT
+
+  if [[ "${host}" == "<IP_сервера>" ]]; then
+    warn "Не удалось определить публичный IP автоматически. Укажи вручную:"
+    warn "  echo 'PROXYCTL_PUBLIC_HOST=<твой_ip_или_домен>' >> ${CONFIG_FILE}"
+  fi
 }
 
 ensure_public_host_in_config() {
