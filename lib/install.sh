@@ -184,15 +184,42 @@ mtg_arch() {
 
 ensure_mtg_binary() {
   local version="${PROXYCTL_MTG_VERSION:-v2.1.7}"
+  local version_no_v
   local arch
-  local url
+  local direct_url
+  local archive_url
+  local tmp_dir
+  local archive_path
+  local extracted_bin
 
   arch="$(mtg_arch)"
-  url="https://github.com/9seconds/mtg/releases/download/${version}/mtg-linux-${arch}"
+  version_no_v="${version#v}"
+  direct_url="https://github.com/9seconds/mtg/releases/download/${version}/mtg-linux-${arch}"
+  archive_url="https://github.com/9seconds/mtg/releases/download/${version}/mtg-${version_no_v}-linux-${arch}.tar.gz"
 
   log "Скачиваю mtg (${version}, ${arch})"
-  curl -fsSL "${url}" -o "${THIRDPARTY_MTG_BIN}"
-  chmod +x "${THIRDPARTY_MTG_BIN}"
+
+  if curl -fsSL "${direct_url}" -o "${THIRDPARTY_MTG_BIN}"; then
+    chmod +x "${THIRDPARTY_MTG_BIN}"
+    success "mtg установлен в ${THIRDPARTY_MTG_BIN}"
+    return
+  fi
+
+  command_path_or_die tar >/dev/null
+  tmp_dir="$(mktemp -d /tmp/proxyctl-mtg.XXXXXX)"
+  archive_path="${tmp_dir}/mtg.tar.gz"
+
+  curl -fsSL "${archive_url}" -o "${archive_path}"
+  tar -xzf "${archive_path}" -C "${tmp_dir}"
+
+  extracted_bin="$(find "${tmp_dir}" -maxdepth 1 -type f -name "mtg-*-linux-${arch}" | head -n 1)"
+  if [[ -z "${extracted_bin}" ]]; then
+    error "Не удалось найти бинарник mtg в архиве ${archive_url}"
+    exit 1
+  fi
+
+  install -m 0755 "${extracted_bin}" "${THIRDPARTY_MTG_BIN}"
+  rm -rf "${tmp_dir}"
   success "mtg установлен в ${THIRDPARTY_MTG_BIN}"
 }
 
