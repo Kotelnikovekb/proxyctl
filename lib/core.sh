@@ -224,6 +224,18 @@ command_path_or_die() {
 }
 
 detect_host() {
+  local host
+
+  host="$(detect_public_host_for_config)"
+  if [[ -n "${host}" ]]; then
+    echo "${host}"
+    return
+  fi
+
+  echo "<IP_сервера>"
+}
+
+detect_public_host_for_config() {
   if [[ -n "${PROXYCTL_PUBLIC_HOST:-}" ]]; then
     echo "${PROXYCTL_PUBLIC_HOST}"
     return
@@ -232,18 +244,16 @@ detect_host() {
   local ip
   local first
 
-  first="$(hostname -I 2>/dev/null || true)"
-  read -r ip _ <<< "${first}"
-  if [[ -n "${ip}" ]]; then
-    echo "${ip}"
-    return
-  fi
-
   ip="$(curl -4 -fsS --max-time 3 https://api.ipify.org 2>/dev/null || true)"
   if [[ -n "${ip}" ]]; then
     echo "${ip}"
     return
   fi
 
-  echo "<IP_сервера>"
+  first="$(hostname -I 2>/dev/null || true)"
+  read -r ip _ <<< "${first}"
+  if [[ -n "${ip}" ]]; then
+    echo "${ip}"
+    return
+  fi
 }

@@ -211,7 +211,7 @@ ensure_mtg_binary() {
 
   log "Скачиваю mtg (${version}, ${arch})"
 
-  if curl -fsSL "${direct_url}" -o "${THIRDPARTY_MTG_BIN}"; then
+  if curl -fsSLo "${THIRDPARTY_MTG_BIN}" "${direct_url}" 2>/dev/null; then
     chmod +x "${THIRDPARTY_MTG_BIN}"
     success "mtg установлен в ${THIRDPARTY_MTG_BIN}"
     return
@@ -221,7 +221,12 @@ ensure_mtg_binary() {
   tmp_dir="$(mktemp -d /tmp/proxyctl-mtg.XXXXXX)"
   archive_path="${tmp_dir}/mtg.tar.gz"
 
-  curl -fsSL "${archive_url}" -o "${archive_path}"
+  if ! curl -fsSLo "${archive_path}" "${archive_url}"; then
+    error "Не удалось скачать mtg ни по одному URL:"
+    error "  - ${direct_url}"
+    error "  - ${archive_url}"
+    exit 1
+  fi
   tar -xzf "${archive_path}" -C "${tmp_dir}"
 
   extracted_bin="$(
@@ -315,12 +320,52 @@ MTProto данные для клиента:
 EOF_HINT
 }
 
+ensure_public_host_in_config() {
+  local host
+  local tmp_file
+
+  if [[ -n "${PROXYCTL_PUBLIC_HOST:-}" ]]; then
+    return
+  fi
+
+  host="$(detect_public_host_for_config || true)"
+  if [[ -z "${host}" ]]; then
+    warn "Не удалось автоматически определить публичный IP для PROXYCTL_PUBLIC_HOST"
+    return
+  fi
+
+  if [[ ! -f "${CONFIG_FILE}" ]]; then
+    printf 'PROXYCTL_PUBLIC_HOST=%s\n' "${host}" > "${CONFIG_FILE}"
+    PROXYCTL_PUBLIC_HOST="${host}"
+    success "Сохранен PROXYCTL_PUBLIC_HOST=${host}"
+    return
+  fi
+
+  if grep -q '^PROXYCTL_PUBLIC_HOST=' "${CONFIG_FILE}"; then
+    tmp_file="$(mktemp)"
+    while IFS= read -r line; do
+      if [[ "${line}" == PROXYCTL_PUBLIC_HOST=* ]]; then
+        printf 'PROXYCTL_PUBLIC_HOST=%s\n' "${host}" >> "${tmp_file}"
+      else
+        printf '%s\n' "${line}" >> "${tmp_file}"
+      fi
+    done < "${CONFIG_FILE}"
+    mv "${tmp_file}" "${CONFIG_FILE}"
+  else
+    printf '\nPROXYCTL_PUBLIC_HOST=%s\n' "${host}" >> "${CONFIG_FILE}"
+  fi
+
+  PROXYCTL_PUBLIC_HOST="${host}"
+  success "Сохранен PROXYCTL_PUBLIC_HOST=${host}"
+}
+
 install_preset() {
   local preset="${1:-}"
 
   require_root
   load_config
   ensure_dirs
+  ensure_public_host_in_config
 
   case "${preset}" in
     api)
