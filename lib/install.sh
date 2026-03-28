@@ -239,8 +239,17 @@ ensure_mtg_binary() {
 }
 
 ensure_mtg_secret() {
+  local need_generate="false"
+
   if [[ -z "${PROXYCTL_MTG_SECRET}" ]]; then
-    PROXYCTL_MTG_SECRET="$(openssl rand -hex 16)"
+    need_generate="true"
+  elif [[ "${PROXYCTL_MTG_SECRET}" =~ ^[0-9a-fA-F]{32}$ ]]; then
+    warn "Обнаружен устаревший формат MTProto secret (32 hex). Будет сгенерирован корректный secret."
+    need_generate="true"
+  fi
+
+  if [[ "${need_generate}" == "true" ]]; then
+    PROXYCTL_MTG_SECRET="$("${THIRDPARTY_MTG_BIN}" generate-secret --hex "${PROXYCTL_MTG_DOMAIN}")"
     warn "Сгенерирован новый MTProto secret: ${PROXYCTL_MTG_SECRET}"
     warn "Сохрани его: это значение нужно клиентам Telegram"
     {
@@ -265,7 +274,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=${THIRDPARTY_MTG_BIN} run --bind 0.0.0.0:${PROXYCTL_DEFAULT_MTPROTO_PORT} ${PROXYCTL_MTG_SECRET} ${PROXYCTL_MTG_DOMAIN}:443
+ExecStart=${THIRDPARTY_MTG_BIN} simple-run 0.0.0.0:${PROXYCTL_DEFAULT_MTPROTO_PORT} ${PROXYCTL_MTG_SECRET}
 Restart=always
 RestartSec=2
 LimitNOFILE=65535
@@ -283,7 +292,7 @@ EOF_MTG
   runner="$(process_service_runner_file mtg)"
   cat > "${runner}" <<EOF_RUN
 #!/usr/bin/env bash
-exec ${THIRDPARTY_MTG_BIN} run --bind 0.0.0.0:${PROXYCTL_DEFAULT_MTPROTO_PORT} ${PROXYCTL_MTG_SECRET} ${PROXYCTL_MTG_DOMAIN}:443
+exec ${THIRDPARTY_MTG_BIN} simple-run 0.0.0.0:${PROXYCTL_DEFAULT_MTPROTO_PORT} ${PROXYCTL_MTG_SECRET}
 EOF_RUN
   chmod +x "${runner}"
 
