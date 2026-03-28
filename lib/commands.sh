@@ -3,24 +3,24 @@
 show_help() {
   cat <<'EOF_HELP'
 proxyctl commands:
-  proxyctl help
-  proxyctl wizard
-  proxyctl install <preset> [preset2 ...]
-  proxyctl add-user <username>
-  proxyctl remove-user <username>
-  proxyctl list-users
-  proxyctl change-password <username>
-  proxyctl show-connect
-  proxyctl show-telegram-link
-  proxyctl restart
-  proxyctl status
+  proxyctl help                          - показать эту справку
+  proxyctl wizard                        - интерактивный выбор и установка пресетов
+  proxyctl install <preset> [preset2 ...] - установить один или несколько пресетов
+  proxyctl add-user <username>           - добавить пользователя для HTTP/SOCKS авторизации
+  proxyctl remove-user <username>        - удалить пользователя
+  proxyctl list-users                    - список пользователей
+  proxyctl change-password <username>    - сменить пароль пользователя
+  proxyctl show-connect                  - показать параметры HTTP/SOCKS подключения
+  proxyctl show-telegram-link            - показать tg:// ссылку для MTProto
+  proxyctl restart                       - перезапустить сервисы proxyctl
+  proxyctl status                        - статус сервисов, конфигурации и пользователей
 
 presets:
-  api
-  telegram-mobile
-  universal
-  mtproto
-  full
+  api              - 3proxy (HTTP + SOCKS5)
+  telegram-mobile  - 3proxy + MTProto
+  universal        - 3proxy (HTTP + SOCKS5)
+  mtproto          - только MTProto
+  full             - 3proxy + MTProto
 
 examples:
   proxyctl install full
