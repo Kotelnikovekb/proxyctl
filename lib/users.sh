@@ -34,9 +34,9 @@ get_user_password_interactive() {
   local pass2
 
   read -r -s -p "Пароль: " pass1
-  echo
+  printf '\n'
   read -r -s -p "Повтори пароль: " pass2
-  echo
+  printf '\n'
 
   if [[ "${pass1}" != "${pass2}" ]]; then
     error "Пароли не совпадают"
@@ -79,6 +79,17 @@ reload_3proxy_if_installed() {
   success "3proxy перезапущен (process-режим)"
 }
 
+prompt_username_if_missing() {
+  local username="${1:-}"
+  local prompt="${2:-Username: }"
+
+  if [[ -z "${username}" ]]; then
+    read -r -p "${prompt}" username
+  fi
+
+  printf '%s\n' "${username}"
+}
+
 add_user() {
   local username="${1:-}"
   local password
@@ -87,10 +98,7 @@ add_user() {
   load_config
   ensure_dirs
 
-  if [[ -z "${username}" ]]; then
-    error "Использование: proxyctl add-user <username>"
-    exit 1
-  fi
+  username="$(prompt_username_if_missing "${username}" "Username: ")"
 
   validate_username "${username}"
 
@@ -117,10 +125,7 @@ remove_user() {
   load_config
   ensure_dirs
 
-  if [[ -z "${username}" ]]; then
-    error "Использование: proxyctl remove-user <username>"
-    exit 1
-  fi
+  username="$(prompt_username_if_missing "${username}" "Username для удаления: ")"
 
   validate_username "${username}"
 
@@ -156,10 +161,7 @@ change_password() {
   load_config
   ensure_dirs
 
-  if [[ -z "${username}" ]]; then
-    error "Использование: proxyctl change-password <username>"
-    exit 1
-  fi
+  username="$(prompt_username_if_missing "${username}" "Username: ")"
 
   validate_username "${username}"
 
