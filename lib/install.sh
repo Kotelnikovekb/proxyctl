@@ -110,14 +110,26 @@ EOF_RUN
 install_3proxy_from_source() {
   local ref="${PROXYCTL_3PROXY_REF:-master}"
   local build_dir
+  local build_log
   local repo_url="https://github.com/3proxy/3proxy.git"
 
   log "Собираю 3proxy из исходников (${repo_url}, ref=${ref})"
   apt_install git build-essential make gcc libc6-dev
 
   build_dir="$(mktemp -d /tmp/proxyctl-3proxy-build.XXXXXX)"
-  git clone --depth 1 --branch "${ref}" "${repo_url}" "${build_dir}"
-  make -C "${build_dir}" -f Makefile.Linux
+  build_log="${LOG_DIR}/3proxy-build.log"
+
+  if ! git clone --depth 1 --branch "${ref}" "${repo_url}" "${build_dir}" >"${build_log}" 2>&1; then
+    error "Не удалось скачать исходники 3proxy. Лог: ${build_log}"
+    tail -n 30 "${build_log}" >&2 || true
+    exit 1
+  fi
+
+  if ! make -C "${build_dir}" -f Makefile.Linux >>"${build_log}" 2>&1; then
+    error "Сборка 3proxy завершилась с ошибкой. Лог: ${build_log}"
+    tail -n 50 "${build_log}" >&2 || true
+    exit 1
+  fi
 
   if [[ ! -x "${build_dir}/bin/3proxy" ]]; then
     error "Сборка 3proxy завершилась без бинарника ${build_dir}/bin/3proxy"
@@ -212,9 +224,12 @@ ensure_mtg_binary() {
   curl -fsSL "${archive_url}" -o "${archive_path}"
   tar -xzf "${archive_path}" -C "${tmp_dir}"
 
-  extracted_bin="$(find "${tmp_dir}" -maxdepth 1 -type f -name "mtg-*-linux-${arch}" | head -n 1)"
+  extracted_bin="$(
+    find "${tmp_dir}" -type f \( -name "mtg" -o -name "mtg-*" \) -perm -111 2>/dev/null | head -n 1
+  )"
   if [[ -z "${extracted_bin}" ]]; then
     error "Не удалось найти бинарник mtg в архиве ${archive_url}"
+    tar -tzf "${archive_path}" | head -n 20 >&2 || true
     exit 1
   fi
 
