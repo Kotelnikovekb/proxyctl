@@ -67,10 +67,15 @@ EOF_3P
 }
 
 ensure_3proxy_service() {
+  local mode
   local proxy_bin
+  local runner
+
+  mode="$(service_mode)"
   proxy_bin="$(command_path_or_die 3proxy)"
 
-  cat > "/etc/systemd/system/${SERVICE_3PROXY}" <<EOF_SVC
+  if [[ "${mode}" == "systemd" ]]; then
+    cat > "/etc/systemd/system/${SERVICE_3PROXY}" <<EOF_SVC
 [Unit]
 Description=ProxyCTL 3proxy service
 After=network.target
@@ -86,15 +91,29 @@ LimitNOFILE=65535
 WantedBy=multi-user.target
 EOF_SVC
 
-  systemctl daemon-reload
-  systemctl enable --now "${SERVICE_3PROXY}"
-  success "Сервис ${SERVICE_3PROXY} запущен"
+    systemctl daemon-reload
+    systemctl enable --now "${SERVICE_3PROXY}"
+    success "Сервис ${SERVICE_3PROXY} запущен"
+    return
+  fi
+
+  runner="$(process_service_runner_file 3proxy)"
+  cat > "${runner}" <<EOF_RUN
+#!/usr/bin/env bash
+exec ${proxy_bin} /etc/3proxy/3proxy.cfg
+EOF_RUN
+  chmod +x "${runner}"
+
+  start_process_service "3proxy"
 }
 
 install_3proxy_stack() {
+  local mode
+
+  mode="$(service_mode)"
   apt_install 3proxy
 
-  if systemctl list-unit-files | grep -q "^3proxy\\.service"; then
+  if [[ "${mode}" == "systemd" ]] && systemctl list-unit-files | grep -q "^3proxy\\.service"; then
     systemctl disable --now 3proxy.service >/dev/null 2>&1 || true
   fi
 
@@ -138,7 +157,13 @@ ensure_mtg_secret() {
 }
 
 ensure_mtg_service() {
-  cat > "/etc/systemd/system/${SERVICE_MTG}" <<EOF_MTG
+  local mode
+  local runner
+
+  mode="$(service_mode)"
+
+  if [[ "${mode}" == "systemd" ]]; then
+    cat > "/etc/systemd/system/${SERVICE_MTG}" <<EOF_MTG
 [Unit]
 Description=ProxyCTL MTProto service (mtg)
 After=network.target
@@ -154,9 +179,20 @@ LimitNOFILE=65535
 WantedBy=multi-user.target
 EOF_MTG
 
-  systemctl daemon-reload
-  systemctl enable --now "${SERVICE_MTG}"
-  success "Сервис ${SERVICE_MTG} запущен"
+    systemctl daemon-reload
+    systemctl enable --now "${SERVICE_MTG}"
+    success "Сервис ${SERVICE_MTG} запущен"
+    return
+  fi
+
+  runner="$(process_service_runner_file mtg)"
+  cat > "${runner}" <<EOF_RUN
+#!/usr/bin/env bash
+exec ${THIRDPARTY_MTG_BIN} run --bind 0.0.0.0:${PROXYCTL_DEFAULT_MTPROTO_PORT} ${PROXYCTL_MTG_SECRET} ${PROXYCTL_MTG_DOMAIN}:443
+EOF_RUN
+  chmod +x "${runner}"
+
+  start_process_service "mtg"
 }
 
 install_mtproto_stack() {
@@ -179,7 +215,6 @@ install_preset() {
   local preset="${1:-}"
 
   require_root
-  require_systemd
   load_config
   ensure_dirs
 

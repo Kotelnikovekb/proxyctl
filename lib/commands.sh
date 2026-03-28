@@ -62,24 +62,33 @@ show_telegram_link() {
 
 restart_services() {
   require_root
-
-  if ! is_systemd_running; then
-    error "systemd не запущен в этой среде"
-    exit 1
-  fi
+  local mode
+  mode="$(service_mode)"
 
   local restarted=0
 
-  if service_installed "${SERVICE_3PROXY}"; then
-    systemctl restart "${SERVICE_3PROXY}"
-    success "Перезапущен ${SERVICE_3PROXY}"
-    restarted=1
-  fi
+  if [[ "${mode}" == "systemd" ]]; then
+    if service_installed "${SERVICE_3PROXY}"; then
+      systemctl restart "${SERVICE_3PROXY}"
+      success "Перезапущен ${SERVICE_3PROXY}"
+      restarted=1
+    fi
 
-  if service_installed "${SERVICE_MTG}"; then
-    systemctl restart "${SERVICE_MTG}"
-    success "Перезапущен ${SERVICE_MTG}"
-    restarted=1
+    if service_installed "${SERVICE_MTG}"; then
+      systemctl restart "${SERVICE_MTG}"
+      success "Перезапущен ${SERVICE_MTG}"
+      restarted=1
+    fi
+  else
+    if [[ -x "$(process_service_runner_file 3proxy)" ]]; then
+      start_process_service "3proxy"
+      restarted=1
+    fi
+
+    if [[ -x "$(process_service_runner_file mtg)" ]]; then
+      start_process_service "mtg"
+      restarted=1
+    fi
   fi
 
   if [[ "${restarted}" -eq 0 ]]; then
@@ -89,9 +98,27 @@ restart_services() {
 
 service_status_line() {
   local service="${1:-}"
+  local mode
+  mode="$(service_mode)"
 
-  if ! command -v systemctl >/dev/null 2>&1; then
-    echo "${service}: systemctl недоступен"
+  if [[ "${mode}" == "process" ]]; then
+    local key
+    if [[ "${service}" == "${SERVICE_3PROXY}" ]]; then
+      key="3proxy"
+    elif [[ "${service}" == "${SERVICE_MTG}" ]]; then
+      key="mtg"
+    else
+      echo "${service}: unknown"
+      return
+    fi
+
+    if process_service_running "${key}"; then
+      echo "${service}: active (process mode)"
+    elif [[ -x "$(process_service_runner_file "${key}")" ]]; then
+      echo "${service}: installed, not active (process mode)"
+    else
+      echo "${service}: not installed (process mode)"
+    fi
     return
   fi
 
@@ -108,6 +135,7 @@ status() {
   load_config
 
   echo "proxyctl status"
+  echo "mode: $(service_mode)"
   service_status_line "${SERVICE_3PROXY}"
   service_status_line "${SERVICE_MTG}"
 

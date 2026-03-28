@@ -54,14 +54,29 @@ first_user() {
 }
 
 reload_3proxy_if_installed() {
-  if ! service_installed "${SERVICE_3PROXY}"; then
-    warn "${SERVICE_3PROXY} не установлен, только обновил пользователей"
+  local mode
+  mode="$(service_mode)"
+
+  if [[ "${mode}" == "systemd" ]]; then
+    if ! service_installed "${SERVICE_3PROXY}"; then
+      warn "${SERVICE_3PROXY} не установлен, только обновил пользователей"
+      return
+    fi
+
+    ensure_3proxy_config
+    systemctl restart "${SERVICE_3PROXY}"
+    success "${SERVICE_3PROXY} перезапущен"
+    return
+  fi
+
+  if [[ ! -x "$(process_service_runner_file 3proxy)" ]]; then
+    warn "3proxy в process-режиме еще не установлен, только обновил пользователей"
     return
   fi
 
   ensure_3proxy_config
-  systemctl restart "${SERVICE_3PROXY}"
-  success "${SERVICE_3PROXY} перезапущен"
+  start_process_service "3proxy"
+  success "3proxy перезапущен (process-режим)"
 }
 
 add_user() {

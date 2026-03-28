@@ -2,8 +2,12 @@
 
 CONFIG_FILE="/etc/proxyctl/config.env"
 STATE_DIR="/var/lib/proxyctl"
+PROXYCTL_HOME="/opt/proxyctl"
 THIRDPARTY_DIR="/opt/proxyctl/bin"
 THIRDPARTY_MTG_BIN="${THIRDPARTY_DIR}/mtg"
+RUNTIME_DIR="/var/run/proxyctl"
+RUNNER_DIR="${PROXYCTL_HOME}/run"
+LOG_DIR="/var/log/proxyctl"
 SERVICE_3PROXY="proxyctl-3proxy.service"
 SERVICE_MTG="proxyctl-mtg.service"
 USER_DB="/etc/proxyctl/users.db"
@@ -55,6 +59,9 @@ ensure_dirs() {
   mkdir -p /etc/proxyctl
   mkdir -p "${STATE_DIR}"
   mkdir -p "${THIRDPARTY_DIR}"
+  mkdir -p "${RUNTIME_DIR}"
+  mkdir -p "${RUNNER_DIR}"
+  mkdir -p "${LOG_DIR}"
 }
 
 require_systemd() {
@@ -81,6 +88,112 @@ service_installed() {
   fi
 
   systemctl list-unit-files | grep -q "^${service}"
+}
+
+service_mode() {
+  if [[ "${PROXYCTL_SERVICE_MODE:-auto}" == "systemd" ]]; then
+    echo "systemd"
+    return
+  fi
+
+  if [[ "${PROXYCTL_SERVICE_MODE:-auto}" == "process" ]]; then
+    echo "process"
+    return
+  fi
+
+  if is_systemd_running; then
+    echo "systemd"
+  else
+    echo "process"
+  fi
+}
+
+process_service_pid_file() {
+  case "${1:-}" in
+    3proxy) echo "${RUNTIME_DIR}/3proxy.pid" ;;
+    mtg) echo "${RUNTIME_DIR}/mtg.pid" ;;
+    *) return 1 ;;
+  esac
+}
+
+process_service_runner_file() {
+  case "${1:-}" in
+    3proxy) echo "${RUNNER_DIR}/run-3proxy.sh" ;;
+    mtg) echo "${RUNNER_DIR}/run-mtg.sh" ;;
+    *) return 1 ;;
+  esac
+}
+
+process_service_log_file() {
+  case "${1:-}" in
+    3proxy) echo "${LOG_DIR}/3proxy.out.log" ;;
+    mtg) echo "${LOG_DIR}/mtg.out.log" ;;
+    *) return 1 ;;
+  esac
+}
+
+process_service_running() {
+  local service_key="${1:-}"
+  local pid_file
+  local pid
+
+  pid_file="$(process_service_pid_file "${service_key}")" || return 1
+  [[ -f "${pid_file}" ]] || return 1
+
+  pid="$(cat "${pid_file}" 2>/dev/null || true)"
+  [[ -n "${pid}" ]] || return 1
+  kill -0 "${pid}" 2>/dev/null
+}
+
+start_process_service() {
+  local service_key="${1:-}"
+  local runner
+  local pid_file
+  local log_file
+  local pid
+
+  runner="$(process_service_runner_file "${service_key}")"
+  pid_file="$(process_service_pid_file "${service_key}")"
+  log_file="$(process_service_log_file "${service_key}")"
+
+  if [[ ! -x "${runner}" ]]; then
+    error "Не найден запускатор сервиса: ${runner}"
+    exit 1
+  fi
+
+  if process_service_running "${service_key}"; then
+    stop_process_service "${service_key}"
+  fi
+
+  nohup "${runner}" >> "${log_file}" 2>&1 &
+  pid="$!"
+  echo "${pid}" > "${pid_file}"
+
+  sleep 1
+  if ! kill -0 "${pid}" 2>/dev/null; then
+    error "Не удалось запустить ${service_key}. Проверь лог: ${log_file}"
+    exit 1
+  fi
+
+  success "Сервис ${service_key} запущен в process-режиме (pid=${pid})"
+}
+
+stop_process_service() {
+  local service_key="${1:-}"
+  local pid_file
+  local pid
+
+  pid_file="$(process_service_pid_file "${service_key}")" || return 0
+  [[ -f "${pid_file}" ]] || return 0
+
+  pid="$(cat "${pid_file}" 2>/dev/null || true)"
+  if [[ -n "${pid}" ]] && kill -0 "${pid}" 2>/dev/null; then
+    kill "${pid}" 2>/dev/null || true
+    sleep 1
+    kill -9 "${pid}" 2>/dev/null || true
+  fi
+
+  rm -f "${pid_file}"
 }
 
 apt_install() {
