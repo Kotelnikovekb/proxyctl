@@ -11,26 +11,50 @@ EOF_AUTH
   fi
 
   local entries=""
+  local allow_list=""
   local line
   local username
   local password
+  local raw_secret
 
   while IFS= read -r line; do
     [[ -z "${line}" ]] && continue
     username="${line%%:*}"
-    password="${line#*:}"
+    raw_secret="${line#*:}"
+
+    if [[ "${raw_secret}" == CL:* ]]; then
+      password="${raw_secret#CL:}"
+    else
+      password="${raw_secret}"
+    fi
+
+    [[ -z "${username}" || -z "${password}" ]] && continue
 
     if [[ -n "${entries}" ]]; then
       entries+=","
     fi
     entries+="${username}:CL:${password}"
+
+    if [[ -n "${allow_list}" ]]; then
+      allow_list+=","
+    fi
+    allow_list+="${username}"
   done < "${USER_DB}"
+
+  if [[ -z "${entries}" || -z "${allow_list}" ]]; then
+    cat <<'EOF_AUTH'
+# Режим без авторизации (пользователи в proxyctl не распознаны).
+auth none
+allow *
+EOF_AUTH
+    return
+  fi
 
   cat <<EOF_AUTH
 # Режим с авторизацией пользователей proxyctl.
 auth strong
 users ${entries}
-allow *
+allow ${allow_list}
 EOF_AUTH
 }
 
@@ -42,6 +66,7 @@ ensure_3proxy_config() {
   auth_block="$(build_3proxy_auth_block)"
 
   cat > "${config_path}" <<EOF_3P
+daemon
 nserver 1.1.1.1
 nserver 8.8.8.8
 nscache 65536
@@ -49,7 +74,6 @@ timeouts 1 5 30 60 180 1800 15 60
 maxconn 2000
 setgid 65534
 setuid 65534
-flush
 
 log /var/log/3proxy/3proxy.log D
 rotate 30
@@ -58,6 +82,8 @@ ${auth_block}
 
 proxy -n -a -p${PROXYCTL_DEFAULT_HTTP_PORT}
 socks -n -a -p${PROXYCTL_DEFAULT_SOCKS_PORT}
+
+flush
 EOF_3P
 
   mkdir -p /var/log/3proxy
@@ -181,6 +207,9 @@ install_3proxy_stack() {
   if [[ "${mode}" == "systemd" ]] && systemctl list-unit-files | grep -q "^3proxy\\.service"; then
     systemctl disable --now 3proxy.service >/dev/null 2>&1 || true
   fi
+
+  ensure_tcp_port_available_for_service "${PROXYCTL_DEFAULT_HTTP_PORT}" "3proxy"
+  ensure_tcp_port_available_for_service "${PROXYCTL_DEFAULT_SOCKS_PORT}" "3proxy"
 
   ensure_3proxy_config
   ensure_3proxy_service
@@ -308,6 +337,7 @@ install_mtproto_stack() {
   local host
 
   apt_install curl ca-certificates openssl
+  ensure_tcp_port_available_for_service "${PROXYCTL_DEFAULT_MTPROTO_PORT}" "mtg"
   ensure_mtg_binary
   ensure_mtg_secret
   ensure_mtg_service

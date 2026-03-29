@@ -223,6 +223,78 @@ command_path_or_die() {
   command -v "${cmd}"
 }
 
+validate_tcp_port() {
+  local port="${1:-}"
+
+  if [[ ! "${port}" =~ ^[0-9]+$ ]] || [[ "${port}" -lt 1 || "${port}" -gt 65535 ]]; then
+    error "Некорректный TCP-порт: ${port}"
+    exit 1
+  fi
+}
+
+port_listener_descriptions() {
+  local port="${1:-}"
+
+  validate_tcp_port "${port}"
+
+  if command -v ss >/dev/null 2>&1; then
+    ss -ltnp "( sport = :${port} )" 2>/dev/null | tail -n +2 || true
+    return
+  fi
+
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -nP -iTCP:"${port}" -sTCP:LISTEN 2>/dev/null | tail -n +2 || true
+    return
+  fi
+
+  if command -v netstat >/dev/null 2>&1; then
+    netstat -ltnp 2>/dev/null | awk -v port=":${port}" '$4 ~ port"$" {print}' || true
+  fi
+}
+
+port_owned_by_expected_service() {
+  local listeners="${1:-}"
+  local service_key="${2:-}"
+  local expected_pattern
+  local line
+
+  case "${service_key}" in
+    3proxy) expected_pattern='3proxy' ;;
+    mtg) expected_pattern='mtg' ;;
+    *) return 1 ;;
+  esac
+
+  while IFS= read -r line; do
+    [[ -z "${line}" ]] && continue
+    if [[ "${line}" != *"${expected_pattern}"* ]]; then
+      return 1
+    fi
+  done <<< "${listeners}"
+
+  return 0
+}
+
+ensure_tcp_port_available_for_service() {
+  local port="${1:-}"
+  local service_key="${2:-}"
+  local listeners
+
+  listeners="$(port_listener_descriptions "${port}")"
+  [[ -z "${listeners}" ]] && return
+
+  if port_owned_by_expected_service "${listeners}" "${service_key}"; then
+    warn "TCP-порт ${port} уже занят текущим сервисом ${service_key}, продолжаю"
+    return
+  fi
+
+  error "TCP-порт ${port} уже занят. Освободи порт или измени конфиг:"
+  while IFS= read -r line; do
+    [[ -z "${line}" ]] && continue
+    error "  ${line}"
+  done <<< "${listeners}"
+  exit 1
+}
+
 detect_host() {
   local host
 
