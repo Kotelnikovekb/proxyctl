@@ -33,14 +33,15 @@ proxyctl install full
 proxyctl help
 proxyctl wizard
 proxyctl install <preset> [preset2 ...]
-proxyctl add-user <username>
+proxyctl add-user <username> [password]
 proxyctl remove-user <username>
 proxyctl list-users
-proxyctl change-password <username>
+proxyctl change-password <username> [password]
 proxyctl show-connect
 proxyctl show-telegram-link
 proxyctl restart
 proxyctl status
+proxyctl diagnose
 ```
 
 ## Пресеты
@@ -63,8 +64,9 @@ proxyctl install api,mtproto
 
 # Управление пользователями
 proxyctl add-user alice
+proxyctl add-user alice strong-pass
 proxyctl list-users
-proxyctl change-password alice
+proxyctl change-password alice new-pass
 proxyctl remove-user alice
 
 # Данные для подключения
@@ -74,6 +76,7 @@ proxyctl show-telegram-link
 # Статус и перезапуск
 proxyctl status
 proxyctl restart
+proxyctl diagnose
 ```
 
 ## Конфиг
@@ -112,9 +115,18 @@ PROXYCTL_SERVICE_MODE=auto
 
 ```bash
 proxyctl status
+proxyctl diagnose
 tail -n 100 /var/log/proxyctl/3proxy.out.log
 tail -n 100 /var/log/proxyctl/mtg.out.log
 ```
+
+`proxyctl diagnose` делает локальную проверку:
+- запущен ли `3proxy`
+- слушаются ли HTTP/SOCKS порты
+- проходят ли локальные HTTP/HTTPS/SOCKS запросы через `127.0.0.1`
+- есть ли проблемы с `users.db`
+
+Команда не может проверить cloud firewall снаружи, поэтому если локальные пробы успешны, а удалённые клиенты не подключаются, проверь ingress-правила для `tcp:3128` и `tcp:1080`.
 
 Если сборка `3proxy` была из исходников, лог сборки:
 

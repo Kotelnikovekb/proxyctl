@@ -26,7 +26,13 @@ validate_password() {
 
 user_exists() {
   local username="${1:-}"
-  [[ -f "${USER_DB}" ]] && grep -q "^${username}:" "${USER_DB}"
+  local line
+
+  while IFS= read -r line; do
+    [[ "${line%%:*}" == "${username}" ]] && return 0
+  done < <(user_db_entries)
+
+  return 1
 }
 
 get_user_password_interactive() {
@@ -47,10 +53,89 @@ get_user_password_interactive() {
   printf '%s\n' "${pass1}"
 }
 
-first_user() {
-  if [[ -f "${USER_DB}" && -s "${USER_DB}" ]]; then
-    head -n 1 "${USER_DB}" | cut -d':' -f1
+normalize_user_db_or_die() {
+  [[ -f "${USER_DB}" ]] || return 0
+
+  local tmp_file
+  local line_count
+  local valid_count
+
+  tmp_file="$(mktemp)"
+  user_db_entries > "${tmp_file}"
+
+  line_count="$(grep -cve '^[[:space:]]*$' -e '^[[:space:]]*#' "${USER_DB}" 2>/dev/null || true)"
+  valid_count="$(grep -c . "${tmp_file}" 2>/dev/null || true)"
+
+  if [[ "${line_count}" != "${valid_count}" ]]; then
+    rm -f "${tmp_file}"
+    error "Файл пользователей поврежден: ${USER_DB}"
+    error "Ожидается формат username:password, по одной записи на строку"
+    exit 1
   fi
+
+  mv "${tmp_file}" "${USER_DB}"
+  chmod 600 "${USER_DB}"
+}
+
+first_user() {
+  local line
+
+  while IFS= read -r line; do
+    printf '%s\n' "${line%%:*}"
+    return 0
+  done < <(user_db_entries)
+}
+
+write_user_db_entries() {
+  local tmp_file
+  tmp_file="$(mktemp)"
+  cat > "${tmp_file}"
+  mv "${tmp_file}" "${USER_DB}"
+  chmod 600 "${USER_DB}"
+}
+
+set_user_password() {
+  local username="${1:-}"
+  local password="${2:-}"
+  local line
+  local updated=0
+
+  {
+    while IFS= read -r line; do
+      if [[ "${line%%:*}" == "${username}" ]]; then
+        printf '%s:%s\n' "${username}" "${password}"
+        updated=1
+      else
+        printf '%s\n' "${line}"
+      fi
+    done < <(user_db_entries)
+
+    if [[ "${updated}" -eq 0 ]]; then
+      printf '%s:%s\n' "${username}" "${password}"
+    fi
+  } | write_user_db_entries
+}
+
+delete_user_password() {
+  local username="${1:-}"
+  local line
+
+  while IFS= read -r line; do
+    [[ "${line%%:*}" == "${username}" ]] && continue
+    printf '%s\n' "${line}"
+  done < <(user_db_entries) | write_user_db_entries
+}
+
+resolve_password() {
+  local password="${1:-}"
+
+  if [[ -n "${password}" ]]; then
+    validate_password "${password}"
+    printf '%s\n' "${password}"
+    return 0
+  fi
+
+  get_user_password_interactive
 }
 
 reload_3proxy_if_installed() {
@@ -92,11 +177,13 @@ prompt_username_if_missing() {
 
 add_user() {
   local username="${1:-}"
+  local password_arg="${2:-}"
   local password
 
   require_root
   load_config
   ensure_dirs
+  normalize_user_db_or_die
 
   username="$(prompt_username_if_missing "${username}" "Username: ")"
 
@@ -107,11 +194,11 @@ add_user() {
     exit 1
   fi
 
-  password="$(get_user_password_interactive)"
+  password="$(resolve_password "${password_arg}")"
 
   touch "${USER_DB}"
   chmod 600 "${USER_DB}"
-  printf '%s:%s\n' "${username}" "${password}" >> "${USER_DB}"
+  set_user_password "${username}" "${password}"
 
   reload_3proxy_if_installed
   success "Пользователь добавлен: ${username}"
@@ -119,11 +206,11 @@ add_user() {
 
 remove_user() {
   local username="${1:-}"
-  local tmp_file
 
   require_root
   load_config
   ensure_dirs
+  normalize_user_db_or_die
 
   username="$(prompt_username_if_missing "${username}" "Username для удаления: ")"
 
@@ -134,10 +221,7 @@ remove_user() {
     exit 1
   fi
 
-  tmp_file="$(mktemp)"
-  grep -v "^${username}:" "${USER_DB}" > "${tmp_file}"
-  mv "${tmp_file}" "${USER_DB}"
-  chmod 600 "${USER_DB}"
+  delete_user_password "${username}"
 
   reload_3proxy_if_installed
   success "Пользователь удален: ${username}"
@@ -149,17 +233,18 @@ list_users() {
     return
   fi
 
-  cut -d':' -f1 "${USER_DB}"
+  user_db_entries | cut -d':' -f1
 }
 
 change_password() {
   local username="${1:-}"
+  local password_arg="${2:-}"
   local password
-  local tmp_file
 
   require_root
   load_config
   ensure_dirs
+  normalize_user_db_or_die
 
   username="$(prompt_username_if_missing "${username}" "Username: ")"
 
@@ -170,19 +255,8 @@ change_password() {
     exit 1
   fi
 
-  password="$(get_user_password_interactive)"
-
-  tmp_file="$(mktemp)"
-  while IFS= read -r line; do
-    if [[ "${line%%:*}" == "${username}" ]]; then
-      printf '%s:%s\n' "${username}" "${password}" >> "${tmp_file}"
-    else
-      printf '%s\n' "${line}" >> "${tmp_file}"
-    fi
-  done < "${USER_DB}"
-
-  mv "${tmp_file}" "${USER_DB}"
-  chmod 600 "${USER_DB}"
+  password="$(resolve_password "${password_arg}")"
+  set_user_password "${username}" "${password}"
 
   reload_3proxy_if_installed
   success "Пароль обновлен: ${username}"

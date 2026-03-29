@@ -232,6 +232,60 @@ validate_tcp_port() {
   fi
 }
 
+user_db_entries() {
+  if [[ ! -f "${USER_DB}" ]]; then
+    return 0
+  fi
+
+  local line
+  local username
+  local password
+  local extra
+
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    line="${line%$'\r'}"
+    [[ -z "${line}" ]] && continue
+    [[ "${line}" == \#* ]] && continue
+
+    IFS=':' read -r username password extra <<< "${line}"
+    if [[ -z "${username}" || -z "${password}" || -n "${extra}" ]]; then
+      continue
+    fi
+
+    printf '%s:%s\n' "${username}" "${password}"
+  done < "${USER_DB}"
+}
+
+count_valid_users() {
+  local count=0
+  while IFS= read -r _; do
+    count=$((count + 1))
+  done < <(user_db_entries)
+  echo "${count}"
+}
+
+has_invalid_user_db_entries() {
+  [[ ! -f "${USER_DB}" ]] && return 1
+
+  local line
+  local username
+  local password
+  local extra
+
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    line="${line%$'\r'}"
+    [[ -z "${line}" ]] && continue
+    [[ "${line}" == \#* ]] && continue
+
+    IFS=':' read -r username password extra <<< "${line}"
+    if [[ -z "${username}" || -z "${password}" || -n "${extra}" ]]; then
+      return 0
+    fi
+  done < "${USER_DB}"
+
+  return 1
+}
+
 port_listener_descriptions() {
   local port="${1:-}"
 

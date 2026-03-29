@@ -12,22 +12,10 @@ EOF_AUTH
 
   local entries=""
   local allow_list=""
-  local line
   local username
   local password
-  local raw_secret
 
-  while IFS= read -r line; do
-    [[ -z "${line}" ]] && continue
-    username="${line%%:*}"
-    raw_secret="${line#*:}"
-
-    if [[ "${raw_secret}" == CL:* ]]; then
-      password="${raw_secret#CL:}"
-    else
-      password="${raw_secret}"
-    fi
-
+  while IFS=':' read -r username password; do
     [[ -z "${username}" || -z "${password}" ]] && continue
 
     if [[ -n "${entries}" ]]; then
@@ -39,7 +27,7 @@ EOF_AUTH
       allow_list+=","
     fi
     allow_list+="${username}"
-  done < "${USER_DB}"
+  done < <(user_db_entries)
 
   if [[ -z "${entries}" || -z "${allow_list}" ]]; then
     cat <<'EOF_AUTH'
@@ -61,12 +49,17 @@ EOF_AUTH
 ensure_3proxy_config() {
   local config_path="/etc/3proxy/3proxy.cfg"
   local auth_block
+  local service_daemon_line="daemon"
 
   mkdir -p /etc/3proxy
   auth_block="$(build_3proxy_auth_block)"
 
+  if [[ "$(service_mode)" == "systemd" ]]; then
+    service_daemon_line=""
+  fi
+
   cat > "${config_path}" <<EOF_3P
-daemon
+${service_daemon_line}
 nserver 1.1.1.1
 nserver 8.8.8.8
 nscache 65536
