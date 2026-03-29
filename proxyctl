@@ -63,6 +63,9 @@ case "${cmd}" in
   diagnose)
     diagnose
     ;;
+  print-gcp-firewall)
+    print_gcp_firewall
+    ;;
   *)
     show_help
     exit 1

@@ -383,3 +383,11 @@ detect_public_host_for_config() {
     return
   fi
 }
+
+gcp_metadata_get() {
+  local path="${1:-}"
+  [[ -n "${path}" ]] || return 1
+
+  curl -fsS --max-time 2 -H "Metadata-Flavor: Google" \
+    "http://metadata.google.internal/computeMetadata/v1/${path}" 2>/dev/null || true
+}

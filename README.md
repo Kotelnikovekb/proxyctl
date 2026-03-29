@@ -42,6 +42,7 @@ proxyctl show-telegram-link
 proxyctl restart
 proxyctl status
 proxyctl diagnose
+proxyctl print-gcp-firewall
 ```
 
 ## Пресеты
@@ -72,6 +73,7 @@ proxyctl remove-user alice
 # Данные для подключения
 proxyctl show-connect
 proxyctl show-telegram-link
+proxyctl print-gcp-firewall
 
 # Статус и перезапуск
 proxyctl status
@@ -116,6 +118,7 @@ PROXYCTL_SERVICE_MODE=auto
 ```bash
 proxyctl status
 proxyctl diagnose
+proxyctl print-gcp-firewall
 tail -n 100 /var/log/proxyctl/3proxy.out.log
 tail -n 100 /var/log/proxyctl/mtg.out.log
 ```
@@ -127,6 +130,20 @@ tail -n 100 /var/log/proxyctl/mtg.out.log
 - есть ли проблемы с `users.db`
 
 Команда не может проверить cloud firewall снаружи, поэтому если локальные пробы успешны, а удалённые клиенты не подключаются, проверь ingress-правила для `tcp:3128` и `tcp:1080`.
+
+Для Google Cloud можно сразу вывести готовые команды:
+
+```bash
+proxyctl print-gcp-firewall
+```
+
+Как применять:
+- запусти `proxyctl print-gcp-firewall` на VM в GCP
+- скопируй команды `gcloud compute instances add-tags ...` и `gcloud compute firewall-rules create ...`
+- выполни их в `gcloud` на машине, где ты авторизован в нужном GCP-проекте
+- если правило уже существует, используй команду `gcloud compute firewall-rules update ...`
+
+Команда пытается автоматически определить `instance name`, `zone` и `network` через GCP metadata. Если VM не в GCP или metadata недоступна, она выведет плейсхолдеры, которые нужно заменить вручную.
 
 Если сборка `3proxy` была из исходников, лог сборки:
 

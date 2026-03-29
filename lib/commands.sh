@@ -15,6 +15,7 @@ proxyctl commands:
   proxyctl restart                       - перезапустить сервисы proxyctl
   proxyctl status                        - статус сервисов, конфигурации и пользователей
   proxyctl diagnose                      - локальная диагностика 3proxy, портов и подсказки по firewall
+  proxyctl print-gcp-firewall            - показать готовые gcloud-команды для открытия портов в GCP
 
 presets:
   api              - 3proxy (HTTP + SOCKS5)
@@ -31,9 +32,56 @@ examples:
   proxyctl add-user alice strong-pass
   proxyctl show-connect
   proxyctl diagnose
+  proxyctl print-gcp-firewall
   proxyctl show-telegram-link
   proxyctl status
 EOF_HELP
+}
+
+print_gcp_firewall() {
+  load_config
+
+  local instance_name
+  local zone_full
+  local zone
+  local network_full
+  local network
+  local target_tag="proxyctl"
+  local rule_name="allow-proxyctl"
+  local ports
+
+  instance_name="$(gcp_metadata_get "instance/name")"
+  zone_full="$(gcp_metadata_get "instance/zone")"
+  network_full="$(gcp_metadata_get "instance/network-interfaces/0/network")"
+
+  zone="${zone_full##*/}"
+  network="${network_full##*/}"
+  ports="tcp:${PROXYCTL_DEFAULT_HTTP_PORT},tcp:${PROXYCTL_DEFAULT_SOCKS_PORT},tcp:${PROXYCTL_DEFAULT_MTPROTO_PORT}"
+
+  instance_name="${instance_name:-<instance-name>}"
+  zone="${zone:-<zone>}"
+  network="${network:-default}"
+
+  cat <<EOF_GCP
+# Add a network tag to the VM
+gcloud compute instances add-tags ${instance_name} \\
+  --zone=${zone} \\
+  --tags=${target_tag}
+
+# Create an ingress firewall rule for proxyctl
+gcloud compute firewall-rules create ${rule_name} \\
+  --network=${network} \\
+  --direction=INGRESS \\
+  --action=ALLOW \\
+  --rules=${ports} \\
+  --source-ranges=0.0.0.0/0 \\
+  --target-tags=${target_tag}
+
+# If the firewall rule already exists, update it instead of create
+gcloud compute firewall-rules update ${rule_name} \\
+  --rules=${ports} \\
+  --source-ranges=0.0.0.0/0
+EOF_GCP
 }
 
 diagnose_service_port() {
